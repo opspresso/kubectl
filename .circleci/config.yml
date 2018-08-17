@@ -4,13 +4,7 @@ jobs:
     machine: true
     steps:
       - checkout
-      - run: |
-          curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt > ./VERSION
-          git config --global user.email "ops@nalbam.com"
-          git config --global user.name "bot"
-          git add --all
-          git commit -m "new version"
-          git push origin $CIRCLE_BRANCH
+      - run: ./version.sh $CIRCLE_PROJECT_USERNAME $CIRCLE_PROJECT_REPONAME $GITHUB_TOKEN
 
 workflows:
   version: 2
