@@ -1,5 +1,5 @@
 # kubectl
 
 ```bash
-docker pull opspresso/kubectl
+docker pull quay.io/opspresso/kubectl
 ```
