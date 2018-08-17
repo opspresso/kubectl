@@ -5,7 +5,7 @@ jobs:
    steps:
      - checkout
      - run: |
-         VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
-         docker login -u $DOCKER_USER -p $DOCKER_PASS
-         docker build -t $CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_USERNAME:$VERSION .
-         docker push $CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_USERNAME:$VERSION
+         curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt > ./VERSION
+         git add --all
+         git commit -m "new version"
+         git push origin $CIRCLE_BRANCH
