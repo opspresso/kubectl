@@ -5,7 +5,7 @@ REPONAME=${2}
 GITHUB_TOKEN=${3}
 
 NOW=$(cat ./VERSION)
-NEW=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+NEW=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt | xargs)
 
 echo "USERNAME: ${USERNAME}"
 echo "REPONAME: ${REPONAME}"
