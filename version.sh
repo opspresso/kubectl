@@ -7,10 +7,7 @@ GITHUB_TOKEN=${3}
 NOW=$(cat ./VERSION)
 NEW=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt | xargs)
 
-echo "USERNAME: ${USERNAME}"
-echo "REPONAME: ${REPONAME}"
-echo "NOW: ${NOW}"
-echo "NEW: ${NEW}"
+printf '# %-10s: %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
 
 if [ "${NOW}" != "${NEW}" ]; then
     printf "${NEW}" > VERSION
