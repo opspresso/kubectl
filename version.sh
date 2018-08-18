@@ -20,6 +20,8 @@ if [ "${NOW}" != "${NEW}" ]; then
     git commit -m "${NEW}"
     git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git master
 
+    echo "# git push github.com/${USERNAME}/${REPONAME} ${NEW}"
+
     git tag ${NEW}
     git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git ${NEW}
 fi
