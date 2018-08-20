@@ -3,7 +3,6 @@
 USERNAME=${1}
 REPONAME=${2}
 GITHUB_TOKEN=${3}
-DOCKER_TOKEN=${4}
 
 NOW=$(cat ./VERSION)
 NEW=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt | xargs)
@@ -26,12 +25,5 @@ if [ "${NOW}" != "${NEW}" ]; then
 
         git tag ${NEW}
         git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git ${NEW}
-    fi
-
-    if [ ! -z ${DOCKER_TOKEN} ]; then
-        echo "# post hub.docker.com/${USERNAME}/${REPONAME} ${NEW}"
-
-        curl -H "Content-Type: application/json" --data '{"source_type": "Tag", "source_name": "${NEW}"}' \
-            -X POST https://registry.hub.docker.com/u/${USERNAME}/${REPONAME}/trigger/${DOCKER_TOKEN}/
     fi
 fi
