@@ -13,7 +13,7 @@ if [ "${NOW}" != "${NEW}" ]; then
     printf "${NEW}" > VERSION
     sed -i -e "s/ENV VERSION .*/ENV VERSION ${NEW}/g" Dockerfile
 
-    if [ ! -z ${DOCKER_TOKEN} ]; then
+    if [ ! -z ${GITHUB_TOKEN} ]; then
         git config --global user.name "bot"
         git config --global user.email "ops@nalbam.com"
 
