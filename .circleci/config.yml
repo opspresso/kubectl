@@ -5,7 +5,7 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Check versions
+          name: Check Versions
           command: ./version.sh $CIRCLE_PROJECT_USERNAME $CIRCLE_PROJECT_REPONAME $GITHUB_TOKEN
 
 workflows:
