@@ -15,7 +15,7 @@ if [ "${NOW}" != "${NEW}" ]; then
 
     if [ ! -z ${GITHUB_TOKEN} ]; then
         git config --global user.name "bot"
-        git config --global user.email "ops@nalbam.com"
+        git config --global user.email "bot@nalbam.com"
 
         git add --all
         git commit -m "${NEW}"
