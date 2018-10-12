@@ -5,10 +5,10 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Check Versions
+          name: Build
           command: |
-            chmod 755 ./version.sh
-            ./version.sh $CIRCLE_PROJECT_USERNAME $CIRCLE_PROJECT_REPONAME $GITHUB_TOKEN
+            chmod 755 ./build.sh
+            ./build.sh
 
 workflows:
   version: 2
