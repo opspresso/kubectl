@@ -57,7 +57,7 @@ _prepare() {
 }
 
 _get_version() {
-    NOW=$(cat ./VERSION | xargs)
+    NOW=$(cat ${SHELL_DIR}/VERSION | xargs)
     NEW=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt | xargs)
 
     printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
@@ -104,13 +104,10 @@ build() {
         printf "${NEW}" > ${SHELL_DIR}/VERSION
         printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
 
-        # replace
         _replace
 
-        # git push
         _git_push
 
-        # s3 sync
         _s3_sync "${SHELL_DIR}/target/dist/" "${BUCKET}/latest"
         _cf_reset "${BUCKET}"
     fi
