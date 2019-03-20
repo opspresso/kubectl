@@ -94,7 +94,7 @@ _slack() {
 
         curl -sL opspresso.com/tools/slack | bash -s -- \
             --token="${SLACK_TOKEN}" --username="${USERNAME}" \
-            --footer="${FOOTER}" --footer_icon="https://assets-cdn.github.com/favicon.ico" \
+            --footer="${FOOTER}" --footer_icon="https://repo.opspresso.com/favicon/github.png" \
             --color="good" --title="${TITLE}" "\`${NEW}\`"
     fi
 }
