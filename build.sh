@@ -100,14 +100,13 @@ _slack() {
 }
 
 _replace() {
-    printf "${NEW}" > ${SHELL_DIR}/VERSION
     printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
 
     sed -i -e "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
 }
 
 _get_version() {
-    NOW=$(cat ${SHELL_DIR}/VERSION | xargs)
+    NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
     NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | xargs)
 
     printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
