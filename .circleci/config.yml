@@ -1,23 +1,50 @@
+#
+# CircleCI 2.0
+#
 version: 2
 jobs:
-  build:
-    machine: true
+  package:
+    docker:
+      - image: opspresso/builder
+    working_directory: /tmp/works
     steps:
       - checkout
       - run:
-          name: Build
+          name: Package
           command: |
             chmod 755 ./build.sh
-            ./build.sh
+            ./build.sh package
+      - persist_to_workspace:
+          root: /tmp/works
+          paths:
+            - target/*
+            - build.sh
+  release:
+    docker:
+      - image: circleci/golang
+    steps:
+      - attach_workspace:
+          at: works
+      - run:
+          name: Release
+          command: |
+            chmod 755 ./works/build.sh
+            ./works/build.sh release
 
 workflows:
   version: 2
   apply:
     jobs:
-      - build
+      - package
+      - release:
+          requires:
+            - package
   nightly:
     jobs:
-      - build
+      - package
+      - release:
+          requires:
+            - package
     triggers:
       - schedule:
           cron: "0 0 * * *"

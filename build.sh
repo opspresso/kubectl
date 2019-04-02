@@ -2,6 +2,8 @@
 
 SHELL_DIR=$(dirname $0)
 
+CMD=${1:-${CIRCLE_JOB}}
+
 USERNAME=${CIRCLE_PROJECT_USERNAME}
 REPONAME=${CIRCLE_PROJECT_REPONAME}
 
@@ -59,19 +61,21 @@ _prepare() {
 }
 
 _git_push() {
-    if [ ! -z ${GITHUB_TOKEN} ]; then
-        git config --global user.name "${GIT_USERNAME}"
-        git config --global user.email "${GIT_USEREMAIL}"
-
-        git add --all
-        git commit -m "${NEW}"
-        git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git master
-
-        _command "# git push github.com/${USERNAME}/${REPONAME} ${NEW}"
-
-        git tag ${NEW}
-        git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git ${NEW}
+    if [ -z ${GITHUB_TOKEN} ]; then
+        return
     fi
+
+    git config --global user.name "${GIT_USERNAME}"
+    git config --global user.email "${GIT_USEREMAIL}"
+
+    git add --all
+    git commit -m "${NEW}"
+
+    _command "git push github.com/${USERNAME}/${REPONAME} ${NEW}"
+    git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git master
+
+    # git tag ${NEW}
+    # git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git ${NEW}
 }
 
 _s3_sync() {
@@ -80,23 +84,23 @@ _s3_sync() {
 }
 
 _cf_reset() {
-    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id, DomainName: DomainName, OriginDomainName: Origins.Items[0].DomainName}[?contains(OriginDomainName, '${1}')] | [0]" | jq -r '.Id')
+    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id, DomainName: DomainName, OriginDomainName: Origins.Items[0].DomainName}[?contains(OriginDomainName, '${1}')] | [0].Id" | cut -d'"' -f2)
     if [ "${CFID}" != "" ]; then
+        _command "aws cloudfront create-invalidation --distribution-id ${CFID}"
         aws cloudfront create-invalidation --distribution-id ${CFID} --paths "/*"
     fi
 }
 
 _slack() {
-    if [ ! -z ${SLACK_TOKEN} ]; then
-        TITLE="${REPONAME} updated"
-
-        FOOTER="<https://github.com/${REPOPATH}/releases/tag/${NEW}|${REPOPATH}>"
-
-        curl -sL opspresso.com/tools/slack | bash -s -- \
-            --token="${SLACK_TOKEN}" --username="${USERNAME}" \
-            --footer="${FOOTER}" --footer_icon="https://repo.opspresso.com/favicon/github.png" \
-            --color="good" --title="${TITLE}" "\`${NEW}\`"
+    if [ -z ${SLACK_TOKEN} ]; then
+        return
     fi
+
+    curl -sL opspresso.com/tools/slack | bash -s -- \
+        --token="${SLACK_TOKEN}" --username="${USERNAME}" \
+        --footer="<https://github.com/${REPOPATH}/releases/tag/${NEW}|${REPOPATH}>" \
+        --footer_icon="https://repo.opspresso.com/favicon/github.png" \
+        --color="good" --title="${REPONAME} updated" "\`${NEW}\`"
 }
 
 _replace() {
@@ -112,7 +116,7 @@ _get_version() {
     printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
 }
 
-build() {
+_package() {
     _prepare
 
     _get_version
@@ -129,4 +133,37 @@ build() {
     fi
 }
 
-build
+_release() {
+    if [ -z ${GITHUB_TOKEN} ]; then
+        return
+    fi
+    if [ ! -f ${SHELL_DIR}/target/dist/${REPONAME} ]; then
+        return
+    fi
+
+    VERSION=$(cat ${SHELL_DIR}/target/dist/${REPONAME} | xargs)
+
+    _result "VERSION=${VERSION}"
+
+    _command "go get github.com/tcnksm/ghr"
+    go get github.com/tcnksm/ghr
+
+    _command "ghr ${VERSION} ${SHELL_DIR}/target/dist/"
+    ghr -t ${GITHUB_TOKEN:-EMPTY} \
+        -u ${USERNAME} \
+        -r ${REPONAME} \
+        -c ${CIRCLE_SHA1} \
+        -delete \
+        ${VERSION} ${SHELL_DIR}/target/dist/
+}
+
+_prepare
+
+case ${CMD} in
+    package)
+        _package
+        ;;
+    release)
+        _release
+        ;;
+esac
