@@ -60,6 +60,19 @@ _prepare() {
     find ./** | grep [.]sh | xargs chmod 755
 }
 
+_get_version() {
+    NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
+    NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | xargs)
+
+    printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
+}
+
+_replace() {
+    printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
+
+    sed -i -e "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
+}
+
 _git_push() {
     if [ -z ${GITHUB_TOKEN} ]; then
         return
@@ -76,6 +89,10 @@ _git_push() {
 
     # git tag ${NEW}
     # git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git ${NEW}
+}
+
+_flat_version() {
+    echo "$@" | awk -F. '{ printf("%05d%05d%05d\n", $1,$2,$3); }'
 }
 
 _s3_sync() {
@@ -103,19 +120,6 @@ _slack() {
         --color="good" --title="${REPONAME} updated" "\`${NEW}\`"
 }
 
-_replace() {
-    printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
-
-    sed -i -e "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
-}
-
-_get_version() {
-    NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
-    NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | xargs)
-
-    printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
-}
-
 _package() {
     _prepare
 
@@ -126,8 +130,10 @@ _package() {
 
         _git_push
 
-        _s3_sync "${SHELL_DIR}/target/dist/" "${BUCKET}/latest"
-        _cf_reset "${BUCKET}"
+        if [ "$(_flat_version "$NEW")" -gt "$(_flat_version "$NOW")" ]; then
+            _s3_sync "${SHELL_DIR}/target/dist/" "${BUCKET}/latest"
+            _cf_reset "${BUCKET}"
+        fi
 
         _slack
     fi
