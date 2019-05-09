@@ -5,20 +5,32 @@ version: 2
 jobs:
   package:
     docker:
-      - image: opspresso/builder
+      - image: circleci/python
     working_directory: /tmp/works
     steps:
       - checkout
       - run:
           name: Package
           command: |
-            chmod 755 ./build.sh
+            chmod 755 *.sh
+            ./build-package.sh
             ./build.sh package
       - persist_to_workspace:
           root: /tmp/works
           paths:
             - target/*
             - build.sh
+  publish:
+    docker:
+      - image: opspresso/awscli
+    steps:
+      - attach_workspace:
+          at: works
+      - run:
+          name: Publish
+          command: |
+            chmod 755 ./works/build.sh
+            ./works/build.sh publish
   release:
     docker:
       - image: circleci/golang
@@ -30,6 +42,17 @@ jobs:
           command: |
             chmod 755 ./works/build.sh
             ./works/build.sh release
+  slack:
+    docker:
+      - image: circleci/python
+    steps:
+      - attach_workspace:
+          at: works
+      - run:
+          name: Slack
+          command: |
+            chmod 755 ./works/build.sh
+            ./works/build.sh slack
 
 workflows:
   version: 2
@@ -42,9 +65,15 @@ workflows:
   nightly:
     jobs:
       - package
+      - publish:
+          requires:
+            - package
       - release:
           requires:
             - package
+      - slack:
+          requires:
+            - release
     triggers:
       - schedule:
           cron: "0 * * * *"

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+OS_NAME="$(uname | awk '{print tolower($0)}')"
+
 SHELL_DIR=$(dirname $0)
 
 CMD=${1:-${CIRCLE_JOB}}
@@ -7,15 +9,14 @@ CMD=${1:-${CIRCLE_JOB}}
 USERNAME=${CIRCLE_PROJECT_USERNAME}
 REPONAME=${CIRCLE_PROJECT_REPONAME}
 
-REPOPATH="kubernetes/kubernetes"
-
-BUCKET="repo.opspresso.com"
+BRANCH=${CIRCLE_BRANCH:-master}
 
 GIT_USERNAME="bot"
 GIT_USEREMAIL="bot@nalbam.com"
 
-NOW=
-NEW=
+# GITHUB_TOKEN=
+# PUBLISH_PATH=${PUBLISH_PATH:-repo.opspresso.com/${REPONAME}}
+# SLACK_TOKEN=
 
 ################################################################################
 
@@ -52,90 +53,110 @@ _error() {
     exit 1
 }
 
+_replace() {
+    if [ "${OS_NAME}" == "darwin" ]; then
+        sed -i "" -e "$1" $2
+    else
+        sed -i -e "$1" $2
+    fi
+}
+
 _prepare() {
     # target
     mkdir -p ${SHELL_DIR}/target/dist
 
-    # 755
-    find ./** | grep [.]sh | xargs chmod 755
-}
-
-_get_version() {
-    NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
-    NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | xargs)
-
-    printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
-}
-
-_replace() {
-    printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
-
-    sed -i -e "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
-}
-
-_git_push() {
-    if [ -z ${GITHUB_TOKEN} ]; then
-        return
+    if [ -f ${SHELL_DIR}/target/circleci-stop ]; then
+        _success "circleci-stop"
     fi
-
-    git config --global user.name "${GIT_USERNAME}"
-    git config --global user.email "${GIT_USEREMAIL}"
-
-    git add --all
-    git commit -m "${NEW}"
-
-    _command "git push github.com/${USERNAME}/${REPONAME} ${NEW}"
-    git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git master
-
-    # git tag ${NEW}
-    # git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git ${NEW}
-}
-
-_flat_version() {
-    echo "$@" | awk -F. '{ printf("%05d%05d%05d\n", $1,$2,$3); }'
-}
-
-_s3_sync() {
-    _command "aws s3 sync ${1} s3://${2}/ --acl public-read"
-    aws s3 sync ${1} s3://${2}/ --acl public-read
-}
-
-_cf_reset() {
-    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id, DomainName: DomainName, OriginDomainName: Origins.Items[0].DomainName}[?contains(OriginDomainName, '${1}')] | [0].Id" | cut -d'"' -f2)
-    if [ "${CFID}" != "" ]; then
-        _command "aws cloudfront create-invalidation --distribution-id ${CFID}"
-        aws cloudfront create-invalidation --distribution-id ${CFID} --paths "/*"
-    fi
-}
-
-_slack() {
-    if [ -z ${SLACK_TOKEN} ]; then
-        return
-    fi
-
-    curl -sL opspresso.com/tools/slack | bash -s -- \
-        --token="${SLACK_TOKEN}" --username="${USERNAME}" \
-        --footer="<https://github.com/${REPOPATH}/releases/tag/${NEW}|${REPOPATH}>" \
-        --footer_icon="https://repo.opspresso.com/favicon/github.png" \
-        --color="good" --title="${REPONAME} updated" "\`${NEW}\`"
 }
 
 _package() {
-    _prepare
+    if [ ! -f ${SHELL_DIR}/VERSION ]; then
+        _error "not found VERSION"
+    fi
 
-    _get_version
+    _result "BRANCH=${BRANCH}"
+    _result "PR_NUM=${PR_NUM}"
+    _result "PR_URL=${PR_URL}"
 
-    if [ "${NEW}" != "" ] && [ "${NEW}" != "${NOW}" ]; then
-        _replace
+    # release version
+    MAJOR=$(cat ${SHELL_DIR}/VERSION | xargs | cut -d'.' -f1)
+    MINOR=$(cat ${SHELL_DIR}/VERSION | xargs | cut -d'.' -f2)
+    BUILD=$(cat ${SHELL_DIR}/VERSION | xargs | cut -d'.' -f3)
 
-        _git_push
+    if [ "x${BUILD}" != "x0" ]; then
+        VERSION="${MAJOR}.${MINOR}.${BUILD}"
+        printf "${VERSION}" > ${SHELL_DIR}/target/VERSION
+    else
+        # latest versions
+        GITHUB="https://api.github.com/repos/${USERNAME}/${REPONAME}/releases"
+        VERSION=$(curl -s ${GITHUB} | grep "tag_name" | grep "${MAJOR}.${MINOR}." | head -1 | cut -d'"' -f4 | cut -d'-' -f1)
 
-        if [ "$(_flat_version "$NEW")" -gt "$(_flat_version "$NOW")" ]; then
-            _s3_sync "${SHELL_DIR}/target/dist/" "${BUCKET}/latest"
-            _cf_reset "${BUCKET}"
+        if [ -z ${VERSION} ]; then
+            VERSION="${MAJOR}.${MINOR}.0"
         fi
 
-        _slack
+        _result "VERSION=${VERSION}"
+
+        # new version
+        if [ "${BRANCH}" == "master" ]; then
+            VERSION=$(echo ${VERSION} | perl -pe 's/^(([v\d]+\.)*)(\d+)(.*)$/$1.($3+1).$4/e')
+            printf "${VERSION}" > ${SHELL_DIR}/target/VERSION
+        else
+            PR=$(echo "${BRANCH}" | cut -d'/' -f1)
+
+            if [ "${PR}" == "pull" ]; then
+                printf "${PR}" > ${SHELL_DIR}/target/PR
+
+                if [ "${PR_NUM}" == "" ]; then
+                    PR_NUM=$(echo "${BRANCH}" | cut -d'/' -f2)
+                fi
+                if [ "${PR_NUM}" == "" ] && [ "${PR_URL}" != "" ]; then
+                    PR_NUM=$(echo "${PR_URL}" | cut -d'/' -f7)
+                fi
+                if [ "${PR_NUM}" == "" ]; then
+                    PR_NUM=${CIRCLE_BUILD_NUM}
+                fi
+
+                if [ "${PR_NUM}" != "" ]; then
+                    VERSION="${VERSION}-${PR_NUM}"
+                    printf "${VERSION}" > ${SHELL_DIR}/target/VERSION
+                else
+                    VERSION=
+                fi
+            else
+                VERSION=
+            fi
+        fi
+    fi
+
+    _result "VERSION=${VERSION}"
+}
+
+_publish() {
+    if [ "${BRANCH}" != "master" ]; then
+        return
+    fi
+    if [ -z ${PUBLISH_PATH} ]; then
+        return
+    fi
+    if [ ! -f ${SHELL_DIR}/target/VERSION ]; then
+        return
+    fi
+    if [ -f ${SHELL_DIR}/target/PR ]; then
+        return
+    fi
+
+    BUCKET="$(echo "${PUBLISH_PATH}" | cut -d'/' -f1)"
+
+    # aws s3 sync
+    _command "aws s3 sync ${SHELL_DIR}/target/ s3://${PUBLISH_PATH}/ --acl public-read"
+    aws s3 sync ${SHELL_DIR}/target/ s3://${PUBLISH_PATH}/ --acl public-read
+
+    # aws cf reset
+    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id,Origin:Origins.Items[0].DomainName}[?contains(Origin,'${BUCKET}')] | [0]" | grep 'Id' | cut -d'"' -f4)
+    if [ "${CFID}" != "" ]; then
+        aws cloudfront create-invalidation --distribution-id ${CFID} --paths "/*"
     fi
 }
 
@@ -143,25 +164,54 @@ _release() {
     if [ -z ${GITHUB_TOKEN} ]; then
         return
     fi
-    if [ ! -f ${SHELL_DIR}/target/dist/${REPONAME} ]; then
+    if [ ! -f ${SHELL_DIR}/target/VERSION ]; then
         return
     fi
 
-    VERSION=$(cat ${SHELL_DIR}/target/dist/${REPONAME} | xargs)
-
+    VERSION=$(cat ${SHELL_DIR}/target/VERSION | xargs)
     _result "VERSION=${VERSION}"
+
+    printf "${VERSION}" > ${SHELL_DIR}/target/dist/${VERSION}
+
+    if [ -f ${SHELL_DIR}/target/PR ]; then
+        GHR_PARAM="-delete -prerelease"
+    else
+        GHR_PARAM="-delete"
+    fi
 
     _command "go get github.com/tcnksm/ghr"
     go get github.com/tcnksm/ghr
 
+    # github release
     _command "ghr ${VERSION} ${SHELL_DIR}/target/dist/"
     ghr -t ${GITHUB_TOKEN:-EMPTY} \
         -u ${USERNAME} \
         -r ${REPONAME} \
         -c ${CIRCLE_SHA1} \
-        -delete \
+        ${GHR_PARAM} \
         ${VERSION} ${SHELL_DIR}/target/dist/
 }
+
+_slack() {
+    if [ -z ${SLACK_TOKEN} ]; then
+        return
+    fi
+    if [ ! -f ${SHELL_DIR}/target/VERSION ]; then
+        return
+    fi
+
+    VERSION=$(cat ${SHELL_DIR}/target/VERSION | xargs)
+    _result "VERSION=${VERSION}"
+
+    # send slack
+    curl -sL opspresso.com/tools/slack | bash -s -- \
+        --token="${SLACK_TOKEN}" --username="${USERNAME}" \
+        --footer="<https://github.com/${USERNAME}/${REPONAME}/releases/tag/${VERSION}|${USERNAME}/${REPONAME}>" \
+        --footer_icon="https://repo.opspresso.com/favicon/github.png" \
+        --color="good" --title="${REPONAME}" "\`${VERSION}\`"
+}
+
+################################################################################
 
 _prepare
 
@@ -169,7 +219,15 @@ case ${CMD} in
     package)
         _package
         ;;
+    publish)
+        _publish
+        ;;
     release)
         _release
         ;;
+    slack)
+        _slack
+        ;;
 esac
+
+_success
