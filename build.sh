@@ -9,14 +9,13 @@ CMD=${1:-${CIRCLE_JOB}}
 USERNAME=${CIRCLE_PROJECT_USERNAME}
 REPONAME=${CIRCLE_PROJECT_REPONAME}
 
-BRANCH=${CIRCLE_BRANCH:-master}
+REPOPATH="kubernetes/kubernetes"
 
 GIT_USERNAME="bot"
 GIT_USEREMAIL="bot@nalbam.com"
 
-# GITHUB_TOKEN=
-# PUBLISH_PATH=${PUBLISH_PATH:-repo.opspresso.com/${REPONAME}}
-# SLACK_TOKEN=
+NOW=
+NEW=
 
 ################################################################################
 
@@ -61,173 +60,56 @@ _replace() {
     fi
 }
 
+_flat_version() {
+    echo "$@" | awk -F. '{ printf("%05d%05d%05d\n", $1,$2,$3); }'
+}
+
 _prepare() {
     # target
     mkdir -p ${SHELL_DIR}/target/dist
 
-    if [ -f ${SHELL_DIR}/target/circleci-stop ]; then
-        _success "circleci-stop"
-    fi
+    # 755
+    find ./** | grep [.]sh | xargs chmod 755
 }
 
 _package() {
-    if [ ! -f ${SHELL_DIR}/VERSION ]; then
-        _error "not found VERSION"
-    fi
+    NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
+    NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | xargs)
 
-    _result "BRANCH=${BRANCH}"
-    _result "PR_NUM=${PR_NUM}"
-    _result "PR_URL=${PR_URL}"
+    printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
 
-    # release version
-    MAJOR=$(cat ${SHELL_DIR}/VERSION | xargs | cut -d'.' -f1)
-    MINOR=$(cat ${SHELL_DIR}/VERSION | xargs | cut -d'.' -f2)
-    BUILD=$(cat ${SHELL_DIR}/VERSION | xargs | cut -d'.' -f3)
+    if [ "${NEW}" != "" ] && [ "${NEW}" != "${NOW}" ]; then
+        printf "${NEW}" > ${SHELL_DIR}/VERSION
+        printf "${NEW}" > ${SHELL_DIR}/target/VERSION
 
-    if [ "x${BUILD}" != "x0" ]; then
-        VERSION="${MAJOR}.${MINOR}.${BUILD}"
-        printf "${VERSION}" > ${SHELL_DIR}/target/VERSION
+        printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
+
+        _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
+        _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/README.md
+
+        _git_push
     else
-        # latest versions
-        GITHUB="https://api.github.com/repos/${USERNAME}/${REPONAME}/releases"
-        VERSION=$(curl -s ${GITHUB} | grep "tag_name" | grep "${MAJOR}.${MINOR}." | head -1 | cut -d'"' -f4 | cut -d'-' -f1)
-
-        if [ -z ${VERSION} ]; then
-            VERSION="${MAJOR}.${MINOR}.0"
-        fi
-
-        _result "VERSION=${VERSION}"
-
-        # new version
-        if [ "${BRANCH}" == "master" ]; then
-            VERSION=$(echo ${VERSION} | perl -pe 's/^(([v\d]+\.)*)(\d+)(.*)$/$1.($3+1).$4/e')
-            printf "${VERSION}" > ${SHELL_DIR}/target/VERSION
-        else
-            PR=$(echo "${BRANCH}" | cut -d'/' -f1)
-
-            if [ "${PR}" == "pull" ]; then
-                printf "${PR}" > ${SHELL_DIR}/target/PR
-
-                if [ "${PR_NUM}" == "" ]; then
-                    PR_NUM=$(echo "${BRANCH}" | cut -d'/' -f2)
-                fi
-                if [ "${PR_NUM}" == "" ] && [ "${PR_URL}" != "" ]; then
-                    PR_NUM=$(echo "${PR_URL}" | cut -d'/' -f7)
-                fi
-                if [ "${PR_NUM}" == "" ]; then
-                    PR_NUM=${CIRCLE_BUILD_NUM}
-                fi
-
-                if [ "${PR_NUM}" != "" ]; then
-                    VERSION="${VERSION}-${PR_NUM}"
-                    printf "${VERSION}" > ${SHELL_DIR}/target/VERSION
-                else
-                    VERSION=
-                fi
-            else
-                VERSION=
-            fi
-        fi
-    fi
-
-    _result "VERSION=${VERSION}"
-}
-
-_publish() {
-    if [ "${BRANCH}" != "master" ]; then
-        return
-    fi
-    if [ -z ${PUBLISH_PATH} ]; then
-        return
-    fi
-    if [ ! -f ${SHELL_DIR}/target/VERSION ]; then
-        return
-    fi
-    if [ -f ${SHELL_DIR}/target/PR ]; then
-        return
-    fi
-
-    BUCKET="$(echo "${PUBLISH_PATH}" | cut -d'/' -f1)"
-
-    # aws s3 sync
-    _command "aws s3 sync ${SHELL_DIR}/target/ s3://${PUBLISH_PATH}/ --acl public-read"
-    aws s3 sync ${SHELL_DIR}/target/ s3://${PUBLISH_PATH}/ --acl public-read
-
-    # aws cf reset
-    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id,Origin:Origins.Items[0].DomainName}[?contains(Origin,'${BUCKET}')] | [0]" | grep 'Id' | cut -d'"' -f4)
-    if [ "${CFID}" != "" ]; then
-        aws cloudfront create-invalidation --distribution-id ${CFID} --paths "/*"
+        echo "stop" > ${SHELL_DIR}/target/circleci-stop
     fi
 }
 
-_release() {
+_git_push() {
     if [ -z ${GITHUB_TOKEN} ]; then
         return
     fi
-    if [ ! -f ${SHELL_DIR}/target/VERSION ]; then
-        return
-    fi
 
-    VERSION=$(cat ${SHELL_DIR}/target/VERSION | xargs)
-    _result "VERSION=${VERSION}"
+    git config --global user.name "${GIT_USERNAME}"
+    git config --global user.email "${GIT_USEREMAIL}"
 
-    printf "${VERSION}" > ${SHELL_DIR}/target/dist/${VERSION}
+    git add --all
+    git commit -m "${NEW}"
 
-    if [ -f ${SHELL_DIR}/target/PR ]; then
-        GHR_PARAM="-delete -prerelease"
-    else
-        GHR_PARAM="-delete"
-    fi
-
-    _command "go get github.com/tcnksm/ghr"
-    go get github.com/tcnksm/ghr
-
-    # github release
-    _command "ghr ${VERSION} ${SHELL_DIR}/target/dist/"
-    ghr -t ${GITHUB_TOKEN:-EMPTY} \
-        -u ${USERNAME} \
-        -r ${REPONAME} \
-        -c ${CIRCLE_SHA1} \
-        ${GHR_PARAM} \
-        ${VERSION} ${SHELL_DIR}/target/dist/
-}
-
-_slack() {
-    if [ -z ${SLACK_TOKEN} ]; then
-        return
-    fi
-    if [ ! -f ${SHELL_DIR}/target/VERSION ]; then
-        return
-    fi
-
-    VERSION=$(cat ${SHELL_DIR}/target/VERSION | xargs)
-    _result "VERSION=${VERSION}"
-
-    # send slack
-    curl -sL opspresso.com/tools/slack | bash -s -- \
-        --token="${SLACK_TOKEN}" --username="${USERNAME}" \
-        --footer="<https://github.com/${USERNAME}/${REPONAME}/releases/tag/${VERSION}|${USERNAME}/${REPONAME}>" \
-        --footer_icon="https://repo.opspresso.com/favicon/github.png" \
-        --color="good" --title="${REPONAME}" "\`${VERSION}\`"
+    _command "git push github.com/${USERNAME}/${REPONAME} ${NEW}"
+    git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git master
 }
 
 ################################################################################
 
 _prepare
 
-case ${CMD} in
-    package)
-        _package
-        ;;
-    publish)
-        _publish
-        ;;
-    release)
-        _release
-        ;;
-    slack)
-        _slack
-        ;;
-esac
-
-_success
+_package
