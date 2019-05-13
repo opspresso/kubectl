@@ -53,13 +53,7 @@ jobs:
 
 workflows:
   version: 2
-  # apply:
-  #   jobs:
-  #     - package
-  #     - release:
-  #         requires:
-  #           - package
-  nightly:
+  apply:
     jobs:
       - package
       - publish:
@@ -71,6 +65,18 @@ workflows:
       - slack:
           requires:
             - release
+  nightly:
+    jobs:
+      - package
+      # - publish:
+      #     requires:
+      #       - package
+      # - release:
+      #     requires:
+      #       - package
+      # - slack:
+      #     requires:
+      #       - release
     triggers:
       - schedule:
           cron: "0 * * * *"

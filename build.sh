@@ -88,7 +88,7 @@ _package() {
         _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/README.md
 
         _git_push
-    else
+
         echo "stop" > ${SHELL_DIR}/target/circleci-stop
     fi
 }
