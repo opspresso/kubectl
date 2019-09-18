@@ -11,6 +11,9 @@ REPONAME=${CIRCLE_PROJECT_REPONAME}
 
 REPOPATH="kubernetes/kubernetes"
 
+# ${BUCKET}/latest/${REPONAME}
+PUBLISH_PATH="repo.opspresso.com/latest"
+
 GIT_USERNAME="bot"
 GIT_USEREMAIL="bot@nalbam.com"
 
@@ -61,12 +64,14 @@ _replace() {
 }
 
 _flat_version() {
-    echo "$@" | awk -F. '{ printf("%05d%05d%05d\n", $1,$2,$3); }'
+    echo "$@" | awk -F. '{ printf("%05s%05s%05s\n", $1,$2,$3); }'
 }
+
+################################################################################
 
 _prepare() {
     # target
-    mkdir -p ${SHELL_DIR}/target/dist
+    mkdir -p ${SHELL_DIR}/target/publish
 
     # 755
     find ./** | grep [.]sh | xargs chmod 755
@@ -75,21 +80,37 @@ _prepare() {
 _package() {
     NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
     NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | xargs)
+    # NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | cut -c 2- | xargs)
 
     printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
 
-    if [ "${NEW}" != "" ] && [ "${NEW}" != "${NOW}" ]; then
-        printf "${NEW}" > ${SHELL_DIR}/VERSION
-        printf "${NEW}" > ${SHELL_DIR}/target/VERSION
+    _s3_sync
 
-        printf "${NEW}" > ${SHELL_DIR}/target/dist/${REPONAME}
+    _git_push
+}
 
-        _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
-        _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/README.md
+_s3_sync() {
+    FLAT_NOW="$(_flat_version ${NOW})"
+    FLAT_NEW="$(_flat_version ${NEW})"
 
-        _git_push
+    if [[ "${FLAT_NOW}" > "${FLAT_NEW}" ]]; then
+        return
+    fi
 
-        echo "stop" > ${SHELL_DIR}/target/circleci-stop
+    _result "_s3_sync ${REPONAME} ${NEW}"
+
+    printf "${NEW}" > ${SHELL_DIR}/target/publish/${REPONAME}
+
+    BUCKET="$(echo "${PUBLISH_PATH}" | cut -d'/' -f1)"
+
+    # aws s3 sync
+    _command "aws s3 sync ${SHELL_DIR}/target/publish/ s3://${PUBLISH_PATH}/ --acl public-read"
+    aws s3 sync ${SHELL_DIR}/target/publish/ s3://${PUBLISH_PATH}/ --acl public-read
+
+    # aws cf reset
+    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id,Origin:Origins.Items[0].DomainName}[?contains(Origin,'${BUCKET}')] | [0]" | grep 'Id' | cut -d'"' -f4)
+    if [ "${CFID}" != "" ]; then
+        aws cloudfront create-invalidation --distribution-id ${CFID} --paths "/*"
     fi
 }
 
@@ -97,6 +118,17 @@ _git_push() {
     if [ -z ${GITHUB_TOKEN} ]; then
         return
     fi
+
+    if [ "${NEW}" == "" ] || [ "${NEW}" == "${NOW}" ]; then
+        return
+    fi
+
+    _result "_git_push ${REPONAME} ${NEW}"
+
+    printf "${NEW}" > ${SHELL_DIR}/VERSION
+
+    _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
+    _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/README.md
 
     git config --global user.name "${GIT_USERNAME}"
     git config --global user.email "${GIT_USEREMAIL}"

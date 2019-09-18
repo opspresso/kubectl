@@ -5,7 +5,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/python
+      - image: opspresso/awscli
     steps:
       - checkout
       - run:
