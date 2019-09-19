@@ -5,7 +5,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: opspresso/awscli
+      - image: opspresso/builder
     steps:
       - checkout
       - run:
@@ -81,7 +81,7 @@ workflows:
       - build
     triggers:
       - schedule:
-          cron: "0 * * * *"
+          cron: "35 * * * *"
           filters:
             branches:
               only:
