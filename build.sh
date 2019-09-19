@@ -93,12 +93,13 @@ _s3_sync() {
     FLAT_NOW="$(_flat_version ${NOW})"
     FLAT_NEW="$(_flat_version ${NEW})"
 
-    if [[ "${FLAT_NOW}" > "${FLAT_NEW}" ]]; then
+    if [[ "${FLAT_NOW}" >= "${FLAT_NEW}" ]]; then
         return
     fi
 
     _result "_s3_sync ${REPONAME} ${NEW}"
 
+    printf "${NEW}" > ${SHELL_DIR}/LATEST
     printf "${NEW}" > ${SHELL_DIR}/target/publish/${REPONAME}
 
     BUCKET="$(echo "${PUBLISH_PATH}" | cut -d'/' -f1)"
