@@ -93,7 +93,7 @@ _s3_sync() {
     FLAT_NOW="$(_flat_version ${NOW})"
     FLAT_NEW="$(_flat_version ${NEW})"
 
-    if [[ "${FLAT_NOW}" >= "${FLAT_NEW}" ]]; then
+    if [[ "${FLAT_NOW}" -ge "${FLAT_NEW}" ]]; then
         return
     fi
 
