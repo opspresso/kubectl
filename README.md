@@ -1,7 +1,7 @@
 # kubectl
 
-[![GitHub release](https://img.shields.io/github/release/opspresso/kubectl.svg)](https://github.com/opspresso/kubectl/releases)
-[![CircleCI](https://circleci.com/gh/opspresso/kubectl.svg?style=svg)](https://circleci.com/gh/opspresso/kubectl)
+[![GitHub Actions status](https://github.com/opspresso/kubectl/workflows/Build-Push/badge.svg)](https://github.com/opspresso/kubectl/actions)
+[![GitHub Releases](https://img.shields.io/github/release/opspresso/kubectl.svg)](https://github.com/opspresso/kubectl/releases)
 
 [![DockerHub Badge](http://dockeri.co/image/opspresso/kubectl)](https://hub.docker.com/r/opspresso/kubectl/)
 
