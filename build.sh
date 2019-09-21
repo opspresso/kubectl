@@ -4,18 +4,12 @@ OS_NAME="$(uname | awk '{print tolower($0)}')"
 
 SHELL_DIR=$(dirname $0)
 
-CMD=${1:-${CIRCLE_JOB}}
+REPOSITORY=${GITHUB_REPOSITORY}
 
-USERNAME=${CIRCLE_PROJECT_USERNAME}
-REPONAME=${CIRCLE_PROJECT_REPONAME}
+USERNAME=${GITHUB_ACTOR}
+REPONAME=$(echo "${REPOSITORY}" | cut -d'/' -f2)
 
 REPOPATH="kubernetes/kubernetes"
-
-# ${BUCKET}/latest/${REPONAME}
-PUBLISH_PATH="repo.opspresso.com/latest"
-
-GIT_USERNAME="bot"
-GIT_USEREMAIL="bot@nalbam.com"
 
 NOW=
 NEW=
@@ -63,10 +57,6 @@ _replace() {
     fi
 }
 
-_flat_version() {
-    echo "$@" | awk -F. '{ printf("%05s%05s%05s\n", $1,$2,$3); }'
-}
-
 ################################################################################
 
 _prepare() {
@@ -97,50 +87,38 @@ _s3_sync() {
         return
     fi
 
-    _result "_s3_sync ${REPONAME} ${NEW}"
+    _result "_s3_sync ${NEW}"
 
     printf "${NEW}" > ${SHELL_DIR}/LATEST
     printf "${NEW}" > ${SHELL_DIR}/target/publish/${REPONAME}
-
-    BUCKET="$(echo "${PUBLISH_PATH}" | cut -d'/' -f1)"
-
-    # aws s3 sync
-    _command "aws s3 sync ${SHELL_DIR}/target/publish/ s3://${PUBLISH_PATH}/ --acl public-read"
-    aws s3 sync ${SHELL_DIR}/target/publish/ s3://${PUBLISH_PATH}/ --acl public-read
-
-    # aws cf reset
-    CFID=$(aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id,Origin:Origins.Items[0].DomainName}[?contains(Origin,'${BUCKET}')] | [0]" | grep 'Id' | cut -d'"' -f4)
-    if [ "${CFID}" != "" ]; then
-        aws cloudfront create-invalidation --distribution-id ${CFID} --paths "/*"
-    fi
 }
 
 _git_push() {
-    if [ -z ${GITHUB_TOKEN} ]; then
-        _result "not found GITHUB_TOKEN"
-        return
-    fi
-
     if [ "${NEW}" == "" ] || [ "${NEW}" == "${NOW}" ]; then
         _result "_git_push ${NOW} == ${NEW}"
         return
     fi
 
-    _result "_git_push ${REPONAME} ${NEW}"
+    _result "_git_push ${NEW}"
 
     printf "${NEW}" > ${SHELL_DIR}/VERSION
+    printf "${NEW}" > ${SHELL_DIR}/target/commit_message
 
     _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
     _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/README.md
 
-    git config --global user.name "${GIT_USERNAME}"
-    git config --global user.email "${GIT_USEREMAIL}"
-
-    git add --all
-    git commit -m "${NEW}"
-
-    _command "git push github.com/${USERNAME}/${REPONAME} ${NEW}"
-    git push -q https://${GITHUB_TOKEN}@github.com/${USERNAME}/${REPONAME}.git master
+    cat <<EOF > ${SHELL_DIR}/target/slack_message.json
+{
+    "username": "${USERNAME}",
+    "attachments": [{
+        "color": "good",
+        "footer": "<https://github.com/${REPOSITORY}/releases/tag/${VERSION}|${REPOSITORY}>",
+        "footer_icon": "https://repo.opspresso.com/favicon/github.png",
+        "title": "${REPONAME}",
+        "text": "\`${VERSION}\`"
+    }]
+}
+EOF
 }
 
 ################################################################################
