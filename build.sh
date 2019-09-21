@@ -74,38 +74,41 @@ _package() {
 
     printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
 
-    _s3_sync
-
-    _git_push
+    _latest
+    _updated
 }
 
-_s3_sync() {
+_latest() {
     BIGGER=$(echo -e "${NOW}\n${NEW}" | sort -V -r | head -1)
 
     if [ "${BIGGER}" == "${NOW}" ]; then
-        _result "_s3_sync ${NOW} >= ${NEW}"
+        _result "_latest ${NOW} >= ${NEW}"
         return
     fi
 
-    _result "_s3_sync ${NEW}"
+    VERSION="${NEW}"
 
-    printf "${NEW}" > ${SHELL_DIR}/LATEST
-    printf "${NEW}" > ${SHELL_DIR}/target/publish/${REPONAME}
+    _result "_latest ${VERSION}"
+
+    printf "${VERSION}" > ${SHELL_DIR}/LATEST
+    printf "${VERSION}" > ${SHELL_DIR}/target/publish/${REPONAME}
 }
 
-_git_push() {
+_updated() {
     if [ "${NEW}" == "" ] || [ "${NEW}" == "${NOW}" ]; then
-        _result "_git_push ${NOW} == ${NEW}"
+        _result "_updated ${NOW} == ${NEW}"
         return
     fi
 
-    _result "_git_push ${NEW}"
+    VERSION="${NEW}"
 
-    printf "${NEW}" > ${SHELL_DIR}/VERSION
-    printf "${NEW}" > ${SHELL_DIR}/target/commit_message
+    _result "_updated ${VERSION}"
 
-    _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/Dockerfile
-    _replace "s/ENV VERSION .*/ENV VERSION ${NEW}/g" ${SHELL_DIR}/README.md
+    printf "${VERSION}" > ${SHELL_DIR}/VERSION
+    printf "${VERSION}" > ${SHELL_DIR}/target/commit_message
+
+    _replace "s/ENV VERSION .*/ENV VERSION ${VERSION}/g" ${SHELL_DIR}/Dockerfile
+    _replace "s/ENV VERSION .*/ENV VERSION ${VERSION}/g" ${SHELL_DIR}/README.md
 
     cat <<EOF > ${SHELL_DIR}/target/slack_message.json
 {
