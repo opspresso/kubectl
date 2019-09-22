@@ -74,16 +74,15 @@ _package() {
 
     printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
 
-    _latest
     _updated
+    _latest
 }
 
 _latest() {
     BIGGER=$(echo -e "${NOW}\n${NEW}" | sort -V -r | head -1)
 
     if [ "${BIGGER}" == "${NOW}" ]; then
-        _result "_latest ${NOW} >= ${NEW}"
-        return
+        _success "_latest ${NOW} >= ${NEW}"
     fi
 
     VERSION="${NEW}"
@@ -96,8 +95,7 @@ _latest() {
 
 _updated() {
     if [ "${NEW}" == "" ] || [ "${NEW}" == "${NOW}" ]; then
-        _result "_updated ${NOW} == ${NEW}"
-        return
+        _error "_updated ${NOW} == ${NEW}"
     fi
 
     VERSION="${NEW}"
