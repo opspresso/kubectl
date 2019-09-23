@@ -5,7 +5,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: opspresso/builder
+      - image: opspresso/builder:v0.5.7
     steps:
       - checkout
       - run:
