@@ -24,6 +24,8 @@ jobs:
 
       - name: Docker Push
         uses: opspresso/action-builder@master
+        with:
+          args: --docker
         env:
           USERNAME: ${{ secrets.DOCKER_USERNAME }}
           PASSWORD: ${{ secrets.DOCKER_PASSWORD }}

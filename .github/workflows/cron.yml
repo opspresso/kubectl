@@ -36,6 +36,21 @@ jobs:
           DEST_PATH: "s3://repo.opspresso.com/latest"
           OPTIONS: "--acl public-read"
 
+      - name: Release
+        uses: opspresso/action-builder@master
+        with:
+          args: --release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker Push
+        uses: opspresso/action-builder@master
+        with:
+          args: --docker
+        env:
+          USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
       - name: Post to Slack
         uses: opspresso/action-builder@master
         with:
