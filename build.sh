@@ -4,7 +4,7 @@ OS_NAME="$(uname | awk '{print tolower($0)}')"
 
 SHELL_DIR=$(dirname $0)
 
-REPOSITORY=${GITHUB_REPOSITORY}
+REPOSITORY=${GITHUB_REPOSITORY:-"opspresso/kubectl"}
 
 USERNAME=${GITHUB_ACTOR}
 REPONAME=$(echo "${REPOSITORY}" | cut -d'/' -f2)
@@ -80,13 +80,19 @@ _pickup() {
     cat ${REPOVERSIONS}
 
     while read REPOVERSION; do
+        HAS="false"
+
         while read THISVERSION; do
             if [ "${REPOVERSION}" == "${THISVERSION}" ]; then
+                HAS="true"
                 break
             fi
-
-            VERSION="${REPOVERSION}"
         done < ${THISVERSIONS}
+
+        if [ "${HAS}" == "false" ]; then
+            VERSION="${REPOVERSION}"
+            break
+        fi
     done < ${REPOVERSIONS}
 
     if [ -z "${VERSION}" ]; then
