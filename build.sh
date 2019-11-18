@@ -11,8 +11,7 @@ REPONAME=$(echo "${REPOSITORY}" | cut -d'/' -f2)
 
 REPOPATH="kubernetes/kubernetes"
 
-NOW=
-NEW=
+VERSION=
 
 ################################################################################
 
@@ -80,55 +79,24 @@ _pickup() {
     _command "repo-versions"
     cat ${REPOVERSIONS}
 
-    while read VERSION; do
-        COUNT=$(cat ${THISVERSIONS} | grep "${VERSION}" | wc -l | xargs)
+    while read REPOVERSION; do
+        while read THISVERSION; do
+            if [ "${REPOVERSION}" == "${THISVERSION}" ]; then
+                break
+            fi
 
-        if [ "x${COUNT}" == "x0" ]; then
-            NEW="${VERSION}"
+            VERSION="${REPOVERSION}"
+        done < ${THISVERSIONS}
+
+        if [ -z "${VERSION}" ]; then
             break
         fi
     done < ${REPOVERSIONS}
-}
 
-_package() {
-    NOW=$(cat ${SHELL_DIR}/Dockerfile | grep 'ENV VERSION' | awk '{print $3}' | xargs)
-
-    # NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases | grep tag_name | cut -d'"' -f4 | xargs)
-    # NEW=$(curl -s https://api.github.com/repos/${REPOPATH}/releases/latest | grep tag_name | cut -d'"' -f4 | cut -c 2- | xargs)
-
-    _pickup
-
-    echo
-    printf '# %-10s %-10s %-10s\n' "${REPONAME}" "${NOW}" "${NEW}"
-
-    _updated
-    _latest
-}
-
-_latest() {
-    BIGGER=$(echo -e "${NOW}\n${NEW}" | sort -V -r | head -1)
-
-    if [ "${BIGGER}" == "${NOW}" ]; then
-        _success "_latest ${NOW} >= ${NEW}"
-    fi
-
-    VERSION="${NEW}"
-
-    _result "_latest ${VERSION}"
-
-    printf "${VERSION}" > ${SHELL_DIR}/LATEST
-    printf "${VERSION}" > ${SHELL_DIR}/target/publish/${REPONAME}
+    _result "_pickup ${VERSION}"
 }
 
 _updated() {
-    if [ "${NEW}" == "" ] || [ "${NEW}" == "${NOW}" ]; then
-        _success "_updated ${NOW} == ${NEW}"
-    fi
-
-    VERSION="${NEW}"
-
-    _result "_updated ${VERSION}"
-
     printf "${VERSION}" > ${SHELL_DIR}/VERSION
     printf "${VERSION}" > ${SHELL_DIR}/target/commit_message
 
@@ -147,10 +115,38 @@ _updated() {
     }]
 }
 EOF
+
+    _result "_updated ${VERSION}"
+}
+
+_latest() {
+    COUNT=$(echo ${VERSION} | grep '-' | wc -l | xargs)
+
+    if [ "x${COUNT}" != "x0" ]; then
+        _success "_latest New version has -"
+    fi
+
+    LATEST=$(cat ${SHELL_DIR}/LATEST | xargs)
+
+    BIGGER=$(echo -e "${VERSION}\n${LATEST}" | sort -V -r | head -1)
+
+    if [ "${BIGGER}" == "${LATEST}" ]; then
+        _success "_latest ${VERSION} <= ${LATEST}"
+    fi
+
+    printf "${VERSION}" > ${SHELL_DIR}/LATEST
+    printf "${VERSION}" > ${SHELL_DIR}/target/publish/${REPONAME}
+
+    _result "_latest ${VERSION}"
+}
+
+_build() {
+    _prepare
+    _pickup
+    _updated
+    _latest
 }
 
 ################################################################################
 
-_prepare
-
-_package
+_build
