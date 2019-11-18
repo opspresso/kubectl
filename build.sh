@@ -137,6 +137,8 @@ _latest() {
     printf "${VERSION}" > ${SHELL_DIR}/LATEST
     printf "${VERSION}" > ${SHELL_DIR}/target/publish/${REPONAME}
 
+    _replace "s/ENV LATEST .*/ENV LATEST ${VERSION}/g" ${SHELL_DIR}/README.md
+
     _result "_latest ${VERSION}"
 }
 
