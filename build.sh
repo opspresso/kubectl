@@ -122,7 +122,7 @@ _latest() {
 
 _updated() {
     if [ "${NEW}" == "" ] || [ "${NEW}" == "${NOW}" ]; then
-        _error "_updated ${NOW} == ${NEW}"
+        _success "_updated ${NOW} == ${NEW}"
     fi
 
     VERSION="${NEW}"
