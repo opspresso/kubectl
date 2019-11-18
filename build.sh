@@ -87,11 +87,11 @@ _pickup() {
 
             VERSION="${REPOVERSION}"
         done < ${THISVERSIONS}
-
-        if [ -z "${VERSION}" ]; then
-            break
-        fi
     done < ${REPOVERSIONS}
+
+    if [ -z "${VERSION}" ]; then
+        _error "Not found new version."
+    fi
 
     _result "_pickup ${VERSION}"
 }
@@ -123,7 +123,7 @@ _latest() {
     COUNT=$(echo ${VERSION} | grep '-' | wc -l | xargs)
 
     if [ "x${COUNT}" != "x0" ]; then
-        _success "_latest New version has -"
+        _success "_latest New version has '-'."
     fi
 
     LATEST=$(cat ${SHELL_DIR}/LATEST | xargs)
