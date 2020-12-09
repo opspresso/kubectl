@@ -12,7 +12,7 @@ docker pull opspresso/kubectl
 ## version
 
 ```
-ENV VERSION v1.19.5
+ENV VERSION v1.18.13
 ```
 
 ## latest
