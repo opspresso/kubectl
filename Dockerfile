@@ -4,7 +4,7 @@ FROM alpine
 
 RUN apk add --no-cache bash curl
 
-ENV VERSION v1.18.14
+ENV VERSION v1.17.16
 
 RUN curl -sLO https://storage.googleapis.com/kubernetes-release/release/${VERSION}/bin/linux/amd64/kubectl && \
     chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
